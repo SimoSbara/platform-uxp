@@ -23,8 +23,8 @@ pref("keyword.enabled", false);
 pref("general.useragent.locale", "chrome://global/locale/intl.properties");
 
 // Platform User-agent compatibility mode default settings
-pref("general.useragent.compatMode.gecko", false);
-pref("general.useragent.compatMode.firefox", false);
+pref("general.useragent.compatMode.gecko", true);
+pref("general.useragent.compatMode.firefox", true);
 pref("general.useragent.compatMode.version", "128.0");
 pref("general.useragent.appVersionIsBuildID", false);
 
@@ -398,9 +398,6 @@ pref("media.wmf.disable-d3d11-for-dlls", "igd11dxva64.dll: 20.19.15.4463, 20.19.
 pref("media.wmf.disable-d3d9-for-dlls", "igdumd64.dll: 8.15.10.2189, 8.15.10.2119, 8.15.10.2104, 8.15.10.2102, 8.771.1.0; atiumd64.dll: 7.14.10.833, 7.14.10.867, 7.14.10.885, 7.14.10.903, 7.14.10.911, 8.14.10.768, 9.14.10.1001, 9.14.10.1017, 9.14.10.1080, 9.14.10.1128, 9.14.10.1162, 9.14.10.1171, 9.14.10.1183, 9.14.10.1197, 9.14.10.945, 9.14.10.972, 9.14.10.984, 9.14.10.996");
 #endif
 #if defined(MOZ_FFMPEG)
-#if defined(XP_MACOSX)
-pref("media.ffmpeg.enabled", false);
-#else
 pref("media.ffmpeg.enabled", true);
 #endif
 #endif
@@ -3602,6 +3599,8 @@ pref("browser.drag_out_of_frame_style", 1);
 pref("ui.key.saveLink.shift", false); // true = shift, false = meta
 
 pref("font.name-list.emoji", "Apple Color Emoji");
+pref("font.name-list.emoji", "Twemoji Mozilla");
+
 
 // default fonts (in UTF8 and using canonical names)
 // to determine canonical font names, use a debug build and
