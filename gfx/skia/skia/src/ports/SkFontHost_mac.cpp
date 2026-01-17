@@ -323,16 +323,12 @@ static bool supports_LCD() {
     AutoCFRelease<CGColorSpaceRef> colorspace(CGColorSpaceCreateDeviceRGB());
     AutoCFRelease<CGContextRef> cgContext(CGBitmapContextCreate(&rgb, 1, 1, 8, 4,
                                                                 colorspace, BITMAP_INFO_RGB));
-    AutoCFRelease<CTFontRef> ctFont(CTFontCreateWithName(CFSTR("Helvetica"), 16, nullptr));
+    CGContextSelectFont(cgContext, "Helvetica", 16, kCGEncodingMacRoman);
     CGContextSetShouldSmoothFonts(cgContext, true);
     CGContextSetShouldAntialias(cgContext, true);
     CGContextSetTextDrawingMode(cgContext, kCGTextFill);
     CGContextSetGrayFillColor(cgContext, 1, 1);
-    CGPoint point = CGPointMake(-1, 0);
-    static const UniChar pipeChar = '|';
-    CGGlyph pipeGlyph;
-    CTFontGetGlyphsForCharacters(ctFont, &pipeChar, &pipeGlyph, 1);
-    CTFontDrawGlyphs(ctFont, &pipeGlyph, &point, 1, cgContext);
+    CGContextShowTextAtPoint(cgContext, -1, 0, "|", 1);
 
     uint32_t r = (rgb >> 16) & 0xFF;
     uint32_t g = (rgb >>  8) & 0xFF;
@@ -340,6 +336,7 @@ static bool supports_LCD() {
     gSupportsLCD = (r != g || r != b);
     return (bool) gSupportsLCD;
 }
+
 
 class Offscreen {
 public:
@@ -917,6 +914,9 @@ CGRGBPixel* Offscreen::getCG(const SkScalerContext_Mac& context, const SkGlyph& 
         fDoAA = !doAA;
         fDoLCD = !doLCD;
 
+        CGContextSetFont(fCG, context.fCGFont);
+        CGContextSetFontSize(fCG, CTFontGetSize(context.fCTFont));
+
         CGContextSetTextMatrix(fCG, context.fTransform);
     }
 
@@ -962,7 +962,8 @@ CGRGBPixel* Offscreen::getCG(const SkScalerContext_Mac& context, const SkGlyph& 
     // So always make the font transform identity and place the transform on the context.
     point = CGPointApplyAffineTransform(point, context.fInvTransform);
 
-    CTFontDrawGlyphs(context.fCTFont, &glyphID, &point, 1, fCG);
+    //CTFontDrawGlyphs(context.fCTFont, &glyphID, &point, 1, fCG);
+    CGContextShowGlyphsAtPositions(fCG, &glyphID, &point, 1);
 
     SkASSERT(rowBytesPtr);
     *rowBytesPtr = rowBytes;

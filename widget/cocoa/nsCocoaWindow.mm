@@ -3380,7 +3380,7 @@ static const NSString* kStateCollectionBehavior = @"collectionBehavior";
     // setBottomCornerRounded: is a private API call, so we check to make sure
     // we respond to it just in case.
     if ([self respondsToSelector:@selector(setBottomCornerRounded:)])
-      [self setBottomCornerRounded:YES];
+      [self setBottomCornerRounded:nsCocoaFeatures::OnLionOrLater()];
 
     // setTitlebarAppearsTransparent is only on 10.10+ so make sure it responds
 #if defined(MAC_OS_X_VERSION_10_6) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6)
