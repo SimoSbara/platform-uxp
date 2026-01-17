@@ -655,7 +655,8 @@ class Preprocessor:
         if self.disableLevel > 0:
             self.disableLevel -= 1
         if self.disableLevel == 0:
-            self.ifStates.pop()
+            if len(self.ifStates) != 0:
+                self.ifStates.pop()
     # output processing
     def do_expand(self, args):
         lst = re.split('__(\w+)__', args, re.U)
