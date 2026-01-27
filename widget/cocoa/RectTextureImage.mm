@@ -7,15 +7,34 @@
 
 #include "gfxUtils.h"
 #include "GLContextCGL.h"
-#include "GLUploadHelpers.h"
 #include "mozilla/layers/GLManager.h"
 #include "mozilla/gfx/MacIOSurface.h"
 #include "OGLShaderProgram.h"
 #include "ScopedGLHelpers.h"
+#if !defined(MAC_OS_X_VERSION_10_6) || (MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_6)
+#include "GLUploadHelpers.h"
+#endif
+
+#if !defined(MAC_OS_X_VERSION_10_6) || (MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_6)
 #include "mozilla/gfx/SourceSurfaceCG.h"
+#endif
 
 namespace mozilla {
 namespace widget {
+
+#if defined(MAC_OS_X_VERSION_10_6) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6)
+RectTextureImage::RectTextureImage()
+  : mGLContext(nullptr)
+#else
+RectTextureImage::RectTextureImage(gl::GLContext* aGLContext)
+  : mGLContext(aGLContext)
+#endif
+  , mTexture(0)
+  , mInUpdate(false)
+{
+}
+
+#if !defined(MAC_OS_X_VERSION_10_6) || (MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_6)
 
 /**
  * Returns the first integer greater than |aNumber| which is a power of two
@@ -37,27 +56,25 @@ NextPowerOfTwo(int aNumber)
 #endif
 }
 
-RectTextureImage::RectTextureImage(gl::GLContext* aGLContext)
-  : mGLContext(aGLContext)
-  , mTexture(0)
-  , mInUpdate(false)
-{
-}
-
-RectTextureImage::~RectTextureImage()
-{
-  if (mTexture) {
-    mGLContext->MakeCurrent();
-    mGLContext->fDeleteTextures(1, &mTexture);
-    mTexture = 0;
-  }
-}
-
 LayoutDeviceIntSize
 RectTextureImage::TextureSizeForSize(const LayoutDeviceIntSize& aSize)
 {
   return LayoutDeviceIntSize(NextPowerOfTwo(aSize.width),
                              NextPowerOfTwo(aSize.height));
+}
+#endif
+
+RectTextureImage::~RectTextureImage()
+{
+#if defined(MAC_OS_X_VERSION_10_6) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6)
+  DeleteTexture();
+#else
+  if (mTexture) {
+    mGLContext->MakeCurrent();
+    mGLContext->fDeleteTextures(1, &mTexture);
+    mTexture = 0;
+  }
+#endif
 }
 
 already_AddRefed<gfx::DrawTarget>
@@ -66,16 +83,35 @@ RectTextureImage::BeginUpdate(const LayoutDeviceIntSize& aNewSize,
 {
   MOZ_ASSERT(!mInUpdate, "Beginning update during update!");
   mUpdateRegion = aDirtyRegion;
+#if defined(MAC_OS_X_VERSION_10_6) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6)
+  bool needRecreate = false;
+  if (aNewSize != mBufferSize) {
+    mBufferSize = aNewSize;
+#else
   if (aNewSize != mUsedSize) {
     mUsedSize = aNewSize;
+#endif
     mUpdateRegion =
       LayoutDeviceIntRect(LayoutDeviceIntPoint(0, 0), aNewSize);
+#if defined(MAC_OS_X_VERSION_10_6) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6)
+    needRecreate = true;
+#endif
   }
 
   if (mUpdateRegion.IsEmpty()) {
     return nullptr;
   }
 
+#if defined(MAC_OS_X_VERSION_10_6) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6)
+  if (!mIOSurface || needRecreate) {
+    DeleteTexture();
+    mIOSurface = MacIOSurface::CreateIOSurface(mBufferSize.width,
+                                               mBufferSize.height);
+
+    if (!mIOSurface) {
+      return nullptr;
+    }
+#else
   LayoutDeviceIntSize neededBufferSize = TextureSizeForSize(mUsedSize);
   if (!mUpdateDrawTarget || mBufferSize != neededBufferSize) {
     gfx::IntSize size(neededBufferSize.width, neededBufferSize.height);
@@ -89,26 +125,51 @@ RectTextureImage::BeginUpdate(const LayoutDeviceIntSize& aNewSize,
                                             mUpdateDrawTargetData.get(), size,
                                             stride, format);
     mBufferSize = neededBufferSize;
+
+    // DEBUG
+    mUpdateDrawTarget->FillRect(gfx::Rect(0, 0, size.width, size.height),
+                                gfx::ColorPattern(gfx::Color(1.0f, 0.0f, 0.0f, 0.5f)));
+#endif
   }
 
   mInUpdate = true;
 
+#if defined(MAC_OS_X_VERSION_10_6) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6)
+  mIOSurface->Lock(false);
+  unsigned char* ioData = (unsigned char*)mIOSurface->GetBaseAddress();
+  gfx::IntSize size(mBufferSize.width, mBufferSize.height);
+  int32_t stride = mIOSurface->GetBytesPerRow();
+  gfx::SurfaceFormat format = gfx::SurfaceFormat::B8G8R8A8;
+  RefPtr<gfx::DrawTarget> drawTarget =
+    gfx::Factory::CreateDrawTargetForData(gfx::BackendType::SKIA,
+                                          ioData, size,
+                                          stride, format);
+#else
   RefPtr<gfx::DrawTarget> drawTarget = mUpdateDrawTarget;
+#endif
   return drawTarget.forget();
 }
 
-
+#if !defined(MAC_OS_X_VERSION_10_6) || (MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_6)
 static bool
 CanUploadSubtextures()
 {
   return false;
 }
+#endif
+
 
 void
+#if defined(MAC_OS_X_VERSION_10_6) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6)
+RectTextureImage::EndUpdate()
+#else
 RectTextureImage::EndUpdate(bool aKeepSurface)
+#endif
 {
   MOZ_ASSERT(mInUpdate, "Ending update while not in update");
-
+#if defined(MAC_OS_X_VERSION_10_6) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6)
+  mIOSurface->Unlock(false);
+#else
   mGLContext->MakeCurrent();
   bool needInit = !mTexture;
   LayoutDeviceIntRegion updateRegion = mUpdateRegion;
@@ -135,13 +196,14 @@ RectTextureImage::EndUpdate(bool aKeepSurface)
                            LOCAL_GL_TEXTURE0,
                            LOCAL_GL_TEXTURE_RECTANGLE_ARB);
 
-
+  printf("RectTextureImage DEBUG: Texture=%u Size=%d,%d Error=0x%x\n",
+          mTexture, mBufferSize.width, mBufferSize.height, mGLContext->fGetError());
 
   if (!aKeepSurface) {
     mUpdateDrawTarget = nullptr;
     mUpdateDrawTargetData = nullptr;
   }
-
+#endif
   mInUpdate = false;
 }
 
@@ -152,7 +214,7 @@ RectTextureImage::UpdateFromCGContext(const LayoutDeviceIntSize& aNewSize,
 {
   gfx::IntSize size = gfx::IntSize(CGBitmapContextGetWidth(aCGContext),
                                    CGBitmapContextGetHeight(aCGContext));
-  //mBufferSize.SizeTo(size.width, size.height);
+
   RefPtr<gfx::DrawTarget> dt = BeginUpdate(aNewSize, aDirtyRegion);
   if (dt) {
     gfx::Rect rect(0, 0, size.width, size.height);
@@ -171,7 +233,7 @@ RectTextureImage::UpdateFromCGContext(const LayoutDeviceIntSize& aNewSize,
         CGImageRef image = CGBitmapContextCreateImage(aCGContext);
         if (image) {
             RefPtr<gfx::SourceSurface> sourceSurface = new gfx::SourceSurfaceCG(image);
-			
+
             dt->DrawSurface(sourceSurface, rect, rect,
                             gfx::DrawSurfaceOptions(),
                             gfx::DrawOptions(1.0, gfx::CompositionOp::OP_SOURCE));
@@ -182,31 +244,94 @@ RectTextureImage::UpdateFromCGContext(const LayoutDeviceIntSize& aNewSize,
   }
 }
 
+
+
 void
 RectTextureImage::Draw(layers::GLManager* aManager,
                        const LayoutDeviceIntPoint& aLocation,
                        const gfx::Matrix4x4& aTransform)
 {
-  layers::ShaderProgramOGL* program =
-    aManager->GetProgram(LOCAL_GL_TEXTURE_RECTANGLE_ARB, gfx::SurfaceFormat::R8G8B8A8);
+#if defined(MAC_OS_X_VERSION_10_6) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6)
+  gl::GLContext* gl = aManager->gl();
 
+  BindIOSurfaceToTexture(gl);
+#endif
+
+  layers::ShaderProgramOGL* program =
+    aManager->GetProgram(LOCAL_GL_TEXTURE_RECTANGLE_ARB,
+                         gfx::SurfaceFormat::R8G8B8A8);
+
+#if defined(MAC_OS_X_VERSION_10_6) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6)
+  gl->fActiveTexture(LOCAL_GL_TEXTURE0);
+  gl::ScopedBindTexture texture(gl, mTexture, LOCAL_GL_TEXTURE_RECTANGLE_ARB);
+#else
   aManager->gl()->fActiveTexture(LOCAL_GL_TEXTURE0);
   aManager->gl()->fBindTexture(LOCAL_GL_TEXTURE_RECTANGLE_ARB, mTexture);
+#endif
 
   aManager->ActivateProgram(program);
   program->SetProjectionMatrix(aManager->GetProjMatrix());
   program->SetLayerTransform(gfx::Matrix4x4(aTransform).PostTranslate(aLocation.x, aLocation.y, 0));
   program->SetTextureTransform(gfx::Matrix4x4());
   program->SetRenderOffset(nsIntPoint(0, 0));
+#if defined(MAC_OS_X_VERSION_10_6) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6)
+  program->SetTexCoordMultiplier(mBufferSize.width, mBufferSize.height);
+#else
   program->SetTexCoordMultiplier(mUsedSize.width, mUsedSize.height);
+#endif
   program->SetTextureUnit(0);
 
   aManager->BindAndDrawQuad(program,
+#if defined(MAC_OS_X_VERSION_10_6) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6)
+                            gfx::Rect(0.0, 0.0, mBufferSize.width, mBufferSize.height),
+#else
                             gfx::Rect(0.0, 0.0, mUsedSize.width, mUsedSize.height),
+#endif
                             gfx::Rect(0.0, 0.0, 1.0f, 1.0f));
 
+#if !defined(MAC_OS_X_VERSION_10_6) || (MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_6)
   aManager->gl()->fBindTexture(LOCAL_GL_TEXTURE_RECTANGLE_ARB, 0);
+#endif
 }
+
+#if defined(MAC_OS_X_VERSION_10_6) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6)
+void
+RectTextureImage::DeleteTexture()
+{
+  if (mTexture) {
+    MOZ_ASSERT(mGLContext);
+    mGLContext->MakeCurrent();
+    mGLContext->fDeleteTextures(1, &mTexture);
+    mTexture = 0;
+  }
+}
+
+void
+RectTextureImage::BindIOSurfaceToTexture(gl::GLContext* aGL)
+{
+  if (!mTexture && mIOSurface) {
+    MOZ_ASSERT(aGL);
+    aGL->fGenTextures(1, &mTexture);
+    aGL->fActiveTexture(LOCAL_GL_TEXTURE0);
+    gl::ScopedBindTexture texture(aGL, mTexture, LOCAL_GL_TEXTURE_RECTANGLE_ARB);
+    aGL->fTexParameteri(LOCAL_GL_TEXTURE_RECTANGLE_ARB,
+                        LOCAL_GL_TEXTURE_MIN_FILTER,
+                        LOCAL_GL_LINEAR);
+    aGL->fTexParameteri(LOCAL_GL_TEXTURE_RECTANGLE_ARB,
+                        LOCAL_GL_TEXTURE_MAG_FILTER,
+                        LOCAL_GL_LINEAR);
+    aGL->fTexParameteri(LOCAL_GL_TEXTURE_RECTANGLE_ARB,
+                        LOCAL_GL_TEXTURE_WRAP_T,
+                        LOCAL_GL_CLAMP_TO_EDGE);
+    aGL->fTexParameteri(LOCAL_GL_TEXTURE_RECTANGLE_ARB,
+                        LOCAL_GL_TEXTURE_WRAP_S,
+                        LOCAL_GL_CLAMP_TO_EDGE);
+
+    mIOSurface->CGLTexImageIOSurface2D(gl::GLContextCGL::Cast(aGL)->GetCGLContext());
+    mGLContext = aGL;
+  }
+}
+#endif
 
 } // namespace widget
 } // namespace mozilla
