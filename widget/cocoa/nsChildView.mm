@@ -2383,10 +2383,15 @@ DrawTopLeftCornerMask(CGContextRef aCtx, int aRadius)
 
 #if !defined(MAC_OS_X_VERSION_10_6) || (MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_6)
 static void MaybeDrawRoundedCornersCallback(gfx::DrawTarget* drawTarget,
-	const LayoutDeviceIntRegion& updateRegion) {
+	const LayoutDeviceIntRegion& updateRegion, int devPixelCornerRadius) {
     ClearRegion(drawTarget, updateRegion);
-	gfx::BorrowedCGContext borrow(drawTarget);
-	borrow.Finish();
+    RefPtr<gfx::PathBuilder> builder = drawTarget->CreatePathBuilder();
+    builder->Arc(gfx::Point(devPixelCornerRadius, devPixelCornerRadius), devPixelCornerRadius, 0, 2.0f * M_PI);
+    RefPtr<gfx::Path> path = builder->Finish();
+    drawTarget->Fill(path,
+                     gfx::ColorPattern(gfx::Color(1.0, 1.0, 1.0, 1.0)),
+                     gfx::DrawOptions(1.0f, gfx::CompositionOp::OP_SOURCE));
+
 }
 #endif
 
@@ -2418,7 +2423,7 @@ nsChildView::MaybeDrawRoundedCorners(GLManager* aManager,
   });
 #else
   mCornerMaskImage->UpdateIfNeeded(size, LayoutDeviceIntRegion(),
-	  &MaybeDrawRoundedCornersCallback);
+	  &MaybeDrawRoundedCornersCallback, mDevPixelCornerRadius);
 #endif
 
   // Use operator destination in: multiply all 4 channels with source alpha.
