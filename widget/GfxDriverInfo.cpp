@@ -221,15 +221,13 @@ const GfxDeviceFamily* GfxDriverInfo::GetDeviceFamily(DeviceFamily id)
       APPEND_DEVICE(0x0393);
       break;
     case GeforceFX:
-      // GeForce FX (5000 series) fail to render with layer acceleration.
-      APPEND_DEVICE(0x0300);
-      APPEND_DEVICE(0x0310);
-      APPEND_DEVICE(0x0320);
-      APPEND_DEVICE(0x0330);
-      APPEND_DEVICE(0x0340);
-      APPEND_DEVICE(0x0350);
-      APPEND_DEVICE(0x0360);
-      APPEND_DEVICE(0x00f0);
+      // GeForce FX (5000 series) fail to render with layer acceleration on Mac OS X.
+      APPEND_DEVICE(0x0320); // GeForce FX 5200
+      APPEND_DEVICE(0x0321); // GeForce FX 5200 Ultra
+      APPEND_DEVICE(0x0322); // GeForce FX 5200
+      APPEND_DEVICE(0x0326); // GeForce FX 5500
+      APPEND_DEVICE(0x0329); // GeForce FX Go5200
+      APPEND_DEVICE(0x032f); // GeForce FX 5200
     case Nvidia310M:
       APPEND_DEVICE(0x0A70);
       break;
