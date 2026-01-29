@@ -349,6 +349,7 @@ GfxInfo::GetFeatureStatusImpl(int32_t aFeature,
     if (aFeature == nsIGfxInfo::FEATURE_WEBGL_OPENGL &&
         !nsCocoaFeatures::OnSnowLeopardOrLater()) {
       *aStatus = nsIGfxInfo::FEATURE_BLOCKED_OS_VERSION;
+      aFailureId = "FEATURE_FAILURE_WEBGL_OSX_VERSION";
       return NS_OK;
     }
 #endif
