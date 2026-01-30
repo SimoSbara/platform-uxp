@@ -1826,7 +1826,7 @@ bool
 DrawTargetCG::Init(BackendType aType, const IntSize &aSize, SurfaceFormat &aFormat)
 {
   int32_t stride = GetAlignedStride<16>(aSize.width, BytesPerPixel(aFormat));
-
+  
   // Calling Init with aData == nullptr will allocate.
   return Init(aType, nullptr, aSize, stride, aFormat);
 }
@@ -1848,60 +1848,31 @@ DrawTargetCG::Mask(const Pattern &aSource,
                    const Pattern &aMask,
                    const DrawOptions &aDrawOptions)
 {
-  if (MOZ2D_ERROR_IF(!mCg)) {
-    return;
-  }
+  MOZ_CRASH("GFX: not completely implemented");
   MarkChanged();
 
   CGContextSaveGState(mCg);
 
-  if (aMask.GetType() == PatternType::COLOR) {
-    DrawOptions drawOptions(aDrawOptions);
-    const Color& color = static_cast<const ColorPattern&>(aMask).mColor;
-    drawOptions.mAlpha *= color.a;
-
-    CGRect clipBounds = CGContextGetClipBoundingBox(mCg);
-    FillRect(CGRectToRect(clipBounds), aSource, drawOptions);
+  if (isGradient(aMask)) {
+    assert(0);
   } else {
-    CGImageRef maskImage = nullptr;
-    Matrix maskTransform;
-
-    if (aMask.GetType() == PatternType::SURFACE) {
+    if (aMask.GetType() == PatternType::COLOR) {
+      DrawOptions drawOptions(aDrawOptions);
+      const Color& color = static_cast<const ColorPattern&>(aMask).mColor;
+      drawOptions.mAlpha *= color.a;
+      assert(0);
+      // XXX: we need to get a rect that when transformed covers the entire surface
+      //Rect
+      //FillRect(rect, aSource, drawOptions);
+    } else if (aMask.GetType() == PatternType::SURFACE) {
       const SurfacePattern& pat = static_cast<const SurfacePattern&>(aMask);
-      if (pat.mExtendMode == ExtendMode::CLAMP || pat.mExtendMode == ExtendMode::NONE) {
-        maskImage = GetRetainedImageFromSourceSurface(pat.mSurface.get());
-        maskTransform = pat.mMatrix;
-      }
-    }
-
-    if (!maskImage) {
-      CGRect clipBounds = CGContextGetClipBoundingBox(mCg);
-      IntRect rect = RoundedOut(CGRectToRect(clipBounds));
-
-      RefPtr<DrawTarget> dt = CreateSimilarDrawTarget(rect.Size(), SurfaceFormat::A8);
-      if (dt) {
-        dt->SetTransform(Matrix::Translation(-rect.x, -rect.y));
-        dt->FillRect(Rect(rect), aMask, DrawOptions(1.0f, CompositionOp::OP_SOURCE));
-        RefPtr<SourceSurface> surf = dt->Snapshot();
-        maskImage = GetRetainedImageFromSourceSurface(surf.get());
-        maskTransform = Matrix::Translation(rect.x, rect.y);
-      }
-    }
-
-    if (maskImage) {
-      CGContextConcatCTM(mCg, GfxMatrixToCGAffineTransform(maskTransform));
-
-      CGContextScaleCTM(mCg, 1, -1);
-      IntSize size(CGImageGetWidth(maskImage), CGImageGetHeight(maskImage));
-      CGContextClipToMask(mCg, CGRectMake(0, -size.height, size.width, size.height), maskImage);
-      CGContextScaleCTM(mCg, 1, -1);
-
-      CGContextConcatCTM(mCg, CGAffineTransformInvert(GfxMatrixToCGAffineTransform(maskTransform)));
-
-      CGRect clipBounds = CGContextGetClipBoundingBox(mCg);
-      FillRect(CGRectToRect(clipBounds), aSource, aDrawOptions);
-
-      CGImageRelease(maskImage);
+      CGImageRef mask = GetRetainedImageFromSourceSurface(pat.mSurface.get());
+      MOZ_ASSERT(pat.mSamplingRect.IsEmpty(), "Sampling rect not supported with masks!");
+      Rect rect(0,0, CGImageGetWidth(mask), CGImageGetHeight(mask));
+      // XXX: probably we need to do some flipping of the image or something
+      CGContextClipToMask(mCg, RectToCGRect(rect), mask);
+      FillRect(rect, aSource, aDrawOptions);
+      CGImageRelease(mask);
     }
   }
 
