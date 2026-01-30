@@ -1868,7 +1868,7 @@ DrawTargetCG::Mask(const Pattern &aSource,
 
     if (aMask.GetType() == PatternType::SURFACE) {
       const SurfacePattern& pat = static_cast<const SurfacePattern&>(aMask);
-      if (pat.mExtendMode == ExtendMode::CLAMP) {
+      if (pat.mExtendMode == ExtendMode::CLAMP || pat.mExtendMode == ExtendMode::NONE) {
         maskImage = GetRetainedImageFromSourceSurface(pat.mSurface.get());
         maskTransform = pat.mMatrix;
       }
