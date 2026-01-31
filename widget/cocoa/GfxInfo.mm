@@ -122,8 +122,8 @@ GfxInfo::GetDeviceInfo()
   if (bundle_name_ref) {
     if (CFGetTypeID(bundle_name_ref) == CFStringGetTypeID()) {
       NSString* str = (NSString*)bundle_name_ref;
-      mIOGLBundleName.Assign([str UTF8String]);
-      fprintf(stderr, "GfxInfo::GetDeviceInfo: IOGLBundleName: %s\n", mIOGLBundleName.get());
+      mIOGLBundleName.Assign(NS_ConvertUTF8toUTF16([str UTF8String]));
+      fprintf(stderr, "GfxInfo::GetDeviceInfo: IOGLBundleName: %s\n", NS_ConvertUTF16toUTF8(mIOGLBundleName).get());
     }
     CFRelease(bundle_name_ref);
   } else {
@@ -360,8 +360,7 @@ GfxInfo::GetFeatureStatusImpl(int32_t aFeature,
     // We only need this for 10.5 (PPC) as all drivers on Intel work.
     if (mIOGLBundleName.EqualsLiteral("ATIRadeon8500GLDriver") ||
         mIOGLBundleName.EqualsLiteral("GeForce2MXGLDriver") ||
-        mIOGLBundleName.EqualsLiteral("GeForce3GLDriver") ||
-        ) {
+        mIOGLBundleName.EqualsLiteral("GeForce3GLDriver")) {
       if (aFeature == nsIGfxInfo::FEATURE_OPENGL_LAYERS) {
         *aStatus = nsIGfxInfo::FEATURE_BLOCKED_DEVICE;
         aFailureId = "FEATURE_FAILURE_MAC_UNSUPPORTED_GPU";
