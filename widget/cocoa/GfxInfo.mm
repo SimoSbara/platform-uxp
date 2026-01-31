@@ -117,6 +117,19 @@ GfxInfo::GetDeviceInfo()
     mAdapterDeviceID.AppendPrintf("0x%04x", IntValueOfCFData((CFDataRef)device_id_ref));
     CFRelease(device_id_ref);
   }
+#if !defined(MAC_OS_X_VERSION_10_6) || (MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_6)
+  CFTypeRef bundle_name_ref = SearchPortForProperty(dsp_port, CFSTR("IOGLBundleName"));
+  if (bundle_name_ref) {
+    if (CFGetTypeID(bundle_name_ref) == CFStringGetTypeID()) {
+      NSString* str = (NSString*)bundle_name_ref;
+      mIOGLBundleName.Assign([str UTF8String]);
+      fprintf(stderr, "GfxInfo::GetDeviceInfo: IOGLBundleName: %s\n", mIOGLBundleName.get());
+    }
+    CFRelease(bundle_name_ref);
+  } else {
+    fprintf(stderr, "GfxInfo::GetDeviceInfo: No IOGLBundleName found\n");
+  }
+#endif
 }
 
 nsresult
@@ -343,6 +356,19 @@ GfxInfo::GetFeatureStatusImpl(int32_t aFeature,
   // Don't evaluate special cases when we're evaluating the downloaded blocklist.
   if (!aDriverInfo.Length()) {
 #if !defined(MAC_OS_X_VERSION_10_6) || (MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_6)
+    // Block the non-QECI drivers for OpenGL. They just crash the browser
+    // We only need this for 10.5 (PPC) as all drivers on Intel work.
+    if (mIOGLBundleName.EqualsLiteral("ATIRadeon8500GLDriver") ||
+        mIOGLBundleName.EqualsLiteral("GeForce2MXGLDriver") ||
+        mIOGLBundleName.EqualsLiteral("GeForce3GLDriver") ||
+        ) {
+      if (aFeature == nsIGfxInfo::FEATURE_OPENGL_LAYERS) {
+        *aStatus = nsIGfxInfo::FEATURE_BLOCKED_DEVICE;
+        aFailureId = "FEATURE_FAILURE_MAC_UNSUPPORTED_GPU";
+        return NS_OK;
+      }
+    }
+
     // Many WebGL issues on 10.5, especially:
     //   * bug 631258: WebGL shader paints using textures belonging to other processes on Mac OS 10.5
     //   * bug 618848: Post process shaders and texture mapping crash OS X 10.5
