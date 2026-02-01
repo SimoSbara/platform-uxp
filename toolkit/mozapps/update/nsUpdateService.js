@@ -1125,7 +1125,11 @@ function Update(update) {
   }
 
   if (this._patches.length == 0 && !update.hasAttribute("unsupported")) {
-    throw Cr.NS_ERROR_ILLEGAL_VALUE;
+    if (update.hasAttribute("detailsURL")) {
+      this.unsupported = true;
+    } else {
+      throw Cr.NS_ERROR_ILLEGAL_VALUE;
+    }
   }
 
   // Set the installDate value with the current time. If the update has an
