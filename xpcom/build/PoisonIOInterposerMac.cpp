@@ -332,6 +332,11 @@ namespace mozilla {
 void
 InitPoisonIOInterposer()
 {
+// This causes the debug build to crash on PPC, disable for now
+#if defined(__ppc__)
+  return;
+#endif
+
   // Enable reporting from poisoned write methods
   sIsEnabled = true;
 
