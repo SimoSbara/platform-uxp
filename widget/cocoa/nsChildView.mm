@@ -2801,6 +2801,10 @@ nsChildView::InitCompositor(Compositor* aCompositor)
 void
 nsChildView::DoRemoteComposition(const LayoutDeviceIntRect& aRenderRect)
 {
+  if (!mGLPresenter) {
+    return;
+  }
+
   if (![(ChildView*)mView preRender:mGLPresenter->GetNSOpenGLContext()]) {
     return;
   }
