@@ -1118,7 +1118,11 @@ nsNativeThemeCocoa::DrawSearchField(CGContextRef cgContext, const HIRect& inBoxR
 static const NSSize kCheckmarkSize = NSMakeSize(11, 11);
 static const NSSize kMenuarrowSize = NSMakeSize(9, 10);
 static const NSSize kMenuScrollArrowSize = NSMakeSize(10, 8);
+#if defined(MAC_OS_X_VERSION_10_6) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6
 static NSString* kCheckmarkImage = @"MenuOnState";
+#else
+static NSString* kCheckmarkImage = @"MenuCheckmark";
+#endif
 static NSString* kMenuarrowRightImage = @"MenuSubmenu";
 static NSString* kMenuarrowLeftImage = @"MenuSubmenuLeft";
 static NSString* kMenuDownScrollArrowImage = @"MenuScrollDown";
