@@ -173,6 +173,13 @@ void ConvertYCbCrToRGB32(const uint8_t* y_buf,
 
   auto yuv_constant = libyuv::GetYUVConstants(yuv_color_space, color_range);
 
+#if defined(MOZ_BIG_ENDIAN)
+  const uint8_t* temp_u = src_u;
+  src_u = src_v;
+  src_v = temp_u;
+  yuv_constant = libyuv::GetYVUConstants(yuv_color_space, color_range);
+#endif
+
   DebugOnly<int> err =
     fConvertYUVToARGB(src_y, y_pitch, src_u, uv_pitch, src_v, uv_pitch,
                       rgb_buf, rgb_pitch, yuv_constant, pic_width, pic_height);
