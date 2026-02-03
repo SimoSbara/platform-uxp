@@ -148,7 +148,7 @@ void ConvertYCbCrToRGB32(const uint8_t* y_buf,
       src_u = u_buf + uv_pitch * pic_y + pic_x / 2;
       src_v = v_buf + uv_pitch * pic_y + pic_x / 2;
 
-#if defined(MOZ_BIG_ENDIAN)
+#if MOZ_BIG_ENDIAN
       fConvertYUVToARGB = libyuv::I422ToRGBAMatrix;
 #else
       fConvertYUVToARGB = libyuv::I422ToARGBMatrix;
@@ -160,7 +160,7 @@ void ConvertYCbCrToRGB32(const uint8_t* y_buf,
       src_u = u_buf + (uv_pitch * pic_y + pic_x) / 2;
       src_v = v_buf + (uv_pitch * pic_y + pic_x) / 2;
 
-#if defined(MOZ_BIG_ENDIAN)
+#if MOZ_BIG_ENDIAN
       fConvertYUVToARGB = libyuv::I420ToRGBAMatrix;
 #else
       fConvertYUVToARGB = libyuv::I420ToARGBMatrix;
@@ -173,7 +173,7 @@ void ConvertYCbCrToRGB32(const uint8_t* y_buf,
 
   auto yuv_constant = libyuv::GetYUVConstants(yuv_color_space, color_range);
 
-#if defined(MOZ_BIG_ENDIAN)
+#if MOZ_BIG_ENDIAN
   const uint8_t* temp_u = src_u;
   src_u = src_v;
   src_v = temp_u;

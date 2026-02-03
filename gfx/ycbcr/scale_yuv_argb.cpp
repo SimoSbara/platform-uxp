@@ -129,7 +129,7 @@ struct YUVBuferIter {
 };
 
 void YUVBuferIter_InitI422(YUVBuferIter& iter) {
-#if defined(MOZ_BIG_ENDIAN)
+#if MOZ_BIG_ENDIAN
   iter.YUVToARGBRow = I422ToRGBARow_C;
 #else
   iter.YUVToARGBRow = I422ToARGBRow_C;
@@ -255,7 +255,7 @@ void YUVBuferIter_Init(YUVBuferIter& iter,
                        mozilla::YUVColorSpace yuv_color_space,
                        mozilla::ColorRange color_range) {
   iter.src_fourcc = src_fourcc;
-#if defined(MOZ_BIG_ENDIAN)
+#if MOZ_BIG_ENDIAN
   const uint8_t* temp_u = iter.src_u;
   iter.src_u = iter.src_v;
   iter.src_v = temp_u;
