@@ -910,26 +910,6 @@ DrawTargetCG::MaskSurface(const Pattern &aSource,
   CGContextSetShouldAntialias(cg, aDrawOptions.mAntialiasMode != AntialiasMode::NONE);
 
   CGImageRef image = GetRetainedImageFromSourceSurface(aMask);
-  if (CGImageIsMask(image)) {
-    // debug print
-    printf("Image is a mask\n");
-    CGDataProviderRef provider = CGImageGetDataProvider(image);
-    CGColorSpaceRef grayscale = CGColorSpaceCreateDeviceGray();
-    CGImageRef newImage = CGImageCreate(CGImageGetWidth(image),
-                                        CGImageGetHeight(image),
-                                        CGImageGetBitsPerComponent(image),
-                                        CGImageGetBitsPerPixel(image),
-                                        CGImageGetBytesPerRow(image),
-                                        grayscale,
-                                        kCGImageAlphaNone,
-                                        provider,
-                                        nullptr,
-                                        CGImageGetShouldInterpolate(image),
-                                        CGImageGetRenderingIntent(image));
-    CGColorSpaceRelease(grayscale);
-    CGImageRelease(image);
-    image = newImage;
-  }
 
   // use a negative-y so that the mask image draws right ways up
   CGContextScaleCTM(cg, 1, -1);
@@ -1846,7 +1826,7 @@ bool
 DrawTargetCG::Init(BackendType aType, const IntSize &aSize, SurfaceFormat &aFormat)
 {
   int32_t stride = GetAlignedStride<16>(aSize.width, BytesPerPixel(aFormat));
-
+  
   // Calling Init with aData == nullptr will allocate.
   return Init(aType, nullptr, aSize, stride, aFormat);
 }
