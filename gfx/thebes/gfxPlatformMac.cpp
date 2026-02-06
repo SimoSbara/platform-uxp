@@ -82,8 +82,7 @@ gfxPlatformMac::gfxPlatformMac()
 
     /* Skia is unsupported on Big Endian */
 #ifndef USE_SKIA
-    uint32_t canvasMask = BackendTypeBit(BackendType::CAIRO) |
-                          BackendTypeBit(BackendType::COREGRAPHICS);
+    uint32_t canvasMask = BackendTypeBit(BackendType::COREGRAPHICS);
 #else
     uint32_t canvasMask = BackendTypeBit(BackendType::SKIA);
 #endif
@@ -811,7 +810,7 @@ gfxPlatformMac::GetPlatformCMSOutputProfile(void* &mem, size_t &size)
     err = NCMGetProfileLocation(cmProfile, nullptr, &locationSize);
     if (err != noErr)
         return;
-        
+
     // allocate enough room for location
     location = static_cast<CMProfileLocation*>(malloc(locationSize));
     if (!location) {
@@ -824,7 +823,7 @@ gfxPlatformMac::GetPlatformCMSOutputProfile(void* &mem, size_t &size)
     	CMCloseProfile(cmProfile);
     	return;
     }
-    
+
     char path[512];
     bool path_ok = false;
     size_t rsize = 0;
@@ -848,8 +847,8 @@ gfxPlatformMac::GetPlatformCMSOutputProfile(void* &mem, size_t &size)
 		NS_WARNING("Unsupported ColorSync profile location not supported");
 		break;
 	}
-	
-	
+
+
     if (path_ok) {
 #ifdef DEBUG
 	fprintf(stderr, "Loading ColorSync profile: %s\n",
