@@ -227,6 +227,8 @@ typedef NSInteger NSEventGestureAxis;
   float mCumulativeMagnification;
   float mCumulativeRotation;
 
+  BOOL mDidForceRefreshOpenGL;
+
   // Support for fluid swipe tracking.
   BOOL* mCancelSwipeAnimation;
 
