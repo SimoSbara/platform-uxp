@@ -3698,8 +3698,7 @@ NSEvent* gLastDragMouseDownEvent = nil;
     // is covered by opaque content in our OpenGL surface.
     // So we need to clear the pixel buffer contents in these areas.
     if (!nsCocoaFeatures::OnLionOrLater()) {
-      // fill with window background
-      [[NSColor windowBackgroundColor] set];
+      [[NSColor clearColor] set];
       NSRectFill([self bounds]);
     } else {
       [self clearCorners];
