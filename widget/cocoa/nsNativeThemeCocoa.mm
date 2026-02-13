@@ -2311,6 +2311,59 @@ nsNativeThemeCocoa::DrawNativeTitlebar(CGContextRef aContext, CGRect aTitlebarRe
 {
   CGFloat unifiedHeight = std::max(aUnifiedHeight, aTitlebarRect.size.height);
   DrawNativeTitlebarToolbarWithSquareCorners(aContext, aTitlebarRect, unifiedHeight, aIsMain, aIsFlipped);
+
+// On 10.5, we do not get the traffic lights drawn for us by CoreUI, draw them ourselves.
+#if !defined(MAC_OS_X_VERSION_10_6) || (MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_6)
+  if (!nsCocoaFeatures::OnSnowLeopardOrLater()) {
+    // HIThemeDrawTitleBarWidget draws relative to the content area, not the
+    // unified titlebar Mozilla hands us. Moreover, the buttons are shifted
+    // south and east, so we need to twiddle the rect to fool HIToolkit into
+    // drawing the widget(s) in the right place (issue 247).
+    // These values were discovered empirically. Hope Mozilla doesn't fart
+    // around with the window buttons too much more post-Australis.
+    CGRect nuRect = CGRectMake(aTitlebarRect.origin.x + 1,
+                              aTitlebarRect.origin.y + 28,
+                              aTitlebarRect.size.width - 1,
+                              aTitlebarRect.size.height - 28);
+    HIRect hirect = (HIRect)nuRect;
+    HIThemeWindowWidgetDrawInfo wwdi;
+    wwdi.version = 0;
+    wwdi.widgetState = (aIsMain) ? kThemeStateActive : kThemeStateInactive;
+    wwdi.windowState = wwdi.widgetState;
+    wwdi.windowType = kThemeDocumentWindow;
+    // This is false but it makes HITheme think this is a "regular window."
+    wwdi.attributes = kThemeWindowHasGrow |
+                  kThemeWindowHasFullZoom |
+                  kThemeWindowHasCloseBox |
+                  kThemeWindowHasCollapseBox;
+    // There is no title.
+    wwdi.titleHeight = 0;
+    wwdi.titleWidth = 0;
+
+    // Draw the widgets in order, starting with the close buttons.
+    wwdi.widgetType = kThemeWidgetCloseBox; // kThemeWidgetDirtyCloseBox?
+    HIThemeDrawTitleBarWidget(&hirect, &wwdi, aContext,
+          kHIThemeOrientationNormal);
+    // The button spacing gets one pixel off, so twiddle the rect before we
+    // draw each of the other two buttons.
+    nuRect = CGRectMake(aTitlebarRect.origin.x + 0,
+                              aTitlebarRect.origin.y + 28,
+                              aTitlebarRect.size.width - 0,
+                              aTitlebarRect.size.height - 28);
+    hirect = (HIRect)nuRect;
+    wwdi.widgetType = kThemeWidgetCollapseBox;
+    HIThemeDrawTitleBarWidget(&hirect, &wwdi, aContext,
+          kHIThemeOrientationNormal);
+    nuRect = CGRectMake(aTitlebarRect.origin.x - 1,
+                              aTitlebarRect.origin.y + 28,
+                              aTitlebarRect.size.width + 1,
+                              aTitlebarRect.size.height - 28);
+    hirect = (HIRect)nuRect;
+    wwdi.widgetType = kThemeWidgetZoomBox;
+    HIThemeDrawTitleBarWidget(&hirect, &wwdi, aContext,
+          kHIThemeOrientationNormal);
+  }
+#endif
 }
 
 static void
@@ -2732,59 +2785,6 @@ nsNativeThemeCocoa::DrawWidgetBackground(nsRenderingContext* aContext,
       DrawNativeGreyColorInRect(cgContext, toolbarBottomBorderGrey, drawRect, isMain);
     }
       break;
-
-#if !defined(MAC_OS_X_VERSION_10_6) || (MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_6)
-    case NS_THEME_WINDOW_BUTTON_BOX: {
-// On 10.5, we do not get the traffic lights drawn for us by CoreUI, draw them ourselves.
-        if (!nsCocoaFeatures::OnSnowLeopardOrLater()) {
-            NSWindow* win = NativeWindowForFrame(aFrame);
-            BOOL isMain = [win isMainWindow];
-            // The button spacing gets one pixel off, so twiddle the rect before we
-            // draw each of the other two buttons.
-            CGRect nuRect = CGRectMake(macRect.origin.x + 1,
-                                    macRect.origin.y,
-                                    macRect.size.width - 1,
-                                    macRect.size.height);
-            HIRect hirect = (HIRect)nuRect;
-            HIThemeWindowWidgetDrawInfo wwdi;
-            wwdi.version = 0;
-            wwdi.widgetState = (isMain) ? kThemeStateActive : kThemeStateInactive;
-            wwdi.windowState = wwdi.widgetState;
-            wwdi.windowType = kThemeDocumentWindow;
-            // This is false but it makes HITheme think this is a "regular window."
-            wwdi.attributes = kThemeWindowHasGrow |
-                        kThemeWindowHasFullZoom |
-                        kThemeWindowHasCloseBox |
-                        kThemeWindowHasCollapseBox;
-            // There is no title.
-            wwdi.titleHeight = 0;
-            wwdi.titleWidth = 0;
-
-            // Draw the widgets in order, starting with the close buttons.
-            wwdi.widgetType = kThemeWidgetCloseBox; // kThemeWidgetDirtyCloseBox?
-            HIThemeDrawTitleBarWidget(&hirect, &wwdi, cgContext,
-                kHIThemeOrientationNormal);
-
-            nuRect = CGRectMake(macRect.origin.x + 0,
-                                    macRect.origin.y,
-                                    macRect.size.width - 0,
-                                    macRect.size.height);
-            hirect = (HIRect)nuRect;
-            wwdi.widgetType = kThemeWidgetCollapseBox;
-            HIThemeDrawTitleBarWidget(&hirect, &wwdi, cgContext,
-                kHIThemeOrientationNormal);
-            nuRect = CGRectMake(macRect.origin.x - 1,
-                                    macRect.origin.y,
-                                    macRect.size.width + 1,
-                                    macRect.size.height);
-            hirect = (HIRect)nuRect;
-            wwdi.widgetType = kThemeWidgetZoomBox;
-            HIThemeDrawTitleBarWidget(&hirect, &wwdi, cgContext,
-                kHIThemeOrientationNormal);
-        }
-    }
-      break;
-#endif
 
     case NS_THEME_WINDOW_TITLEBAR: {
       NSWindow* win = NativeWindowForFrame(aFrame);
