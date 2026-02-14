@@ -3741,12 +3741,9 @@ NSEvent* gLastDragMouseDownEvent = nil;
     // This is for 603134
     // Force OpenGL to refresh the very first time we draw. This works around a
     // Mac OS X bug that stops windows updating on OS X when we use OpenGL.
-    // Note that this regresses on 10.13.2 (1429443), so guard it to 10.5 and 10.6
-    if (!nsCocoaFeatures::OnLionOrLater()) {
-      if (!mDidForceRefreshOpenGL) {
-        [self performSelector:@selector(forceRefreshOpenGL) withObject:nil afterDelay:0];
-        mDidForceRefreshOpenGL = YES;
-      }
+    if (!mDidForceRefreshOpenGL) {
+      [self performSelector:@selector(forceRefreshOpenGL) withObject:nil afterDelay:0];
+      mDidForceRefreshOpenGL = YES;
     }
 
     return;
