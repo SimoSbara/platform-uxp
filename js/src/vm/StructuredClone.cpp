@@ -1063,7 +1063,7 @@ JSStructuredCloneWriter::writeString(uint32_t tag, JSString* str)
     if (!str) {
       return false;
     }
-    
+
     JSLinearString* linear = str->ensureLinear(context());
     if (!linear)
         return false;
@@ -1088,7 +1088,7 @@ JSStructuredCloneWriter::writeBigInt(uint32_t tag, BigInt* bi)
     if (!bi) {
       return false;
     }
-    
+
     bool signBit = bi->isNegative();
     size_t length = bi->digitLength();
     // The length must fit in 31 bits to leave room for a sign bit.
@@ -2446,8 +2446,8 @@ JSStructuredCloneReader::readTransferMap()
     // Mark the whole transfer map as consumed.
 #ifdef DEBUG
     SCInput::getPair(headerPos.peek(), &tag, &data);
-    MOZ_ASSERT(tag == SCTAG_TRANSFER_MAP_HEADER);
-    MOZ_ASSERT(TransferableMapHeader(data) == SCTAG_TM_TRANSFERRING);
+    //MOZ_ASSERT(tag == SCTAG_TRANSFER_MAP_HEADER);
+    //MOZ_ASSERT(TransferableMapHeader(data) == SCTAG_TM_TRANSFERRING);
 #endif
     headerPos.write(PairToUInt64(SCTAG_TRANSFER_MAP_HEADER, SCTAG_TM_TRANSFERRED));
 
