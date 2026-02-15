@@ -15,6 +15,7 @@
 #include "PathHelpers.h"
 #include <vector>
 #include <algorithm>
+#include <memory>
 #include "MacIOSurface.h"
 #include "FilterNodeSoftware.h"
 #include "mozilla/Assertions.h"
