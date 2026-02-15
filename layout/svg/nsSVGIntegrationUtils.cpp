@@ -464,17 +464,11 @@ PaintMaskSurface(const PaintFramesParams& aParams,
       gfxContextMatrixAutoSaveRestore matRestore(maskContext);
 
       maskContext->Multiply(gfxMatrix::Translation(-devPixelOffsetToUserSpace));
-#if !defined(MAC_OS_X_VERSION_10_6) || (MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_6)
       const nsStyleImage& maskImage = svgReset->mMask.mLayers[i].mImage;
       if (maskImage.GetType() == nsStyleImageType::eStyleImageType_Gradient) {
-        // TODO: Fix gradient masks in CG backend.
-        fprintf(stderr, "debug: gradient masks are not supported\n");
-        IntSize maskSize = aMaskDT->GetSize();
-        aMaskDT->FillRect(Rect(0, 0, maskSize.width, maskSize.height),
-                          ColorPattern(Color(0.0, 0.0, 0.0, 0.0)));
-        continue;
+        fprintf(stderr, "mask layer %d: gradient image mask (backend=%d)\n", i,
+                int(aMaskDT->GetBackendType()));
       }
-#endif
       nsRenderingContext rc(maskContext);
       nsCSSRendering::PaintBGParams  params =
         nsCSSRendering::PaintBGParams::ForSingleLayer(*presContext,
