@@ -995,43 +995,63 @@ DrawTargetCG::FillRect(const Rect &aRect,
       CGContextClipToRect(cg, RectToCGRect(aRect));
       CGRect clipBounds = CGContextGetClipBoundingBox(cg);
       if (!CGRectIsEmpty(clipBounds)) {
-        int32_t w = static_cast<int32_t>(ceil(clipBounds.size.width));
-        int32_t h = static_cast<int32_t>(ceil(clipBounds.size.height));
-        fprintf(stderr, "cg A8 gradient fallback w=%d h=%d\n", w, h);
-        if (w > 0 && h > 0) {
-          CGColorSpaceRef rgb = CGColorSpaceCreateDeviceRGB();
-          CGContextRef temp = CGBitmapContextCreate(nullptr, w, h, 8,
-                                                    w * 4, rgb,
-                                                    kCGBitmapByteOrder32Host | kCGImageAlphaPremultipliedFirst);
-          if (temp) {
-            CGContextTranslateCTM(temp, -clipBounds.origin.x, -clipBounds.origin.y);
-            CGContextConcatCTM(temp, CGContextGetCTM(cg));
-            DrawGradient(rgb, temp, aPattern, clipBounds);
-            unsigned char* srcData = static_cast<unsigned char*>(CGBitmapContextGetData(temp));
-            unsigned char* dstData = static_cast<unsigned char*>(CGBitmapContextGetData(cg));
-            size_t srcStride = CGBitmapContextGetBytesPerRow(temp);
-            size_t dstStride = CGBitmapContextGetBytesPerRow(cg);
-            int32_t dstX = static_cast<int32_t>(floor(clipBounds.origin.x));
-            int32_t dstY = static_cast<int32_t>(floor(clipBounds.origin.y));
-            for (int32_t y = 0; y < h; ++y) {
-              const unsigned char* srcRow = srcData + y * srcStride;
-              unsigned char* dstRow = dstData + (dstY + y) * dstStride + dstX;
-              for (int32_t x = 0; x < w; ++x) {
-                const uint8_t b = srcRow[x * 4 + 0];
-                const uint8_t g = srcRow[x * 4 + 1];
-                const uint8_t r = srcRow[x * 4 + 2];
-                const uint8_t a = srcRow[x * 4 + 3];
-                const uint8_t luma = static_cast<uint8_t>((54 * r + 183 * g + 19 * b + 128) >> 8);
-                dstRow[x] = static_cast<uint8_t>((luma * a + 127) / 255);
-              }
-            }
-            CGContextRelease(temp);
-            CGColorSpaceRelease(rgb);
+        const int32_t dstWidth = static_cast<int32_t>(CGBitmapContextGetWidth(cg));
+        const int32_t dstHeight = static_cast<int32_t>(CGBitmapContextGetHeight(cg));
+        CGRect dstBounds = CGRectMake(0, 0, dstWidth, dstHeight);
+        CGRect writeBounds = CGRectIntersection(clipBounds, dstBounds);
+        if (!CGRectIsEmpty(writeBounds)) {
+          int32_t w = static_cast<int32_t>(ceil(writeBounds.size.width));
+          int32_t h = static_cast<int32_t>(ceil(writeBounds.size.height));
+          int32_t dstX = static_cast<int32_t>(floor(writeBounds.origin.x));
+          int32_t dstY = static_cast<int32_t>(floor(writeBounds.origin.y));
+          // Clamp to the destination surface to avoid out-of-bounds writes when the clip exceeds the bitmap.
+          if (dstX < 0 || dstY < 0 || dstX >= dstWidth || dstY >= dstHeight) {
+            fprintf(stderr, "cg A8 gradient fallback skipped: dstX=%d dstY=%d dstW=%d dstH=%d\n",
+                    dstX, dstY, dstWidth, dstHeight);
             fixer.Fix(this);
             CGContextRestoreGState(mCg);
             return;
           }
-          CGColorSpaceRelease(rgb);
+          w = std::min<int32_t>(w, dstWidth - dstX);
+          h = std::min<int32_t>(h, dstHeight - dstY);
+          fprintf(stderr, "cg A8 gradient fallback w=%d h=%d dstW=%d dstH=%d dstX=%d dstY=%d\n",
+                  w, h, dstWidth, dstHeight, dstX, dstY);
+          if (w > 0 && h > 0) {
+            CGColorSpaceRef rgb = CGColorSpaceCreateDeviceRGB();
+            CGContextRef temp = CGBitmapContextCreate(nullptr, w, h, 8,
+                                                      w * 4, rgb,
+                                                      kCGBitmapByteOrder32Host | kCGImageAlphaPremultipliedFirst);
+            if (temp) {
+              CGContextTranslateCTM(temp, -writeBounds.origin.x, -writeBounds.origin.y);
+              CGContextConcatCTM(temp, CGContextGetCTM(cg));
+              DrawGradient(rgb, temp, aPattern, writeBounds);
+              unsigned char* srcData = static_cast<unsigned char*>(CGBitmapContextGetData(temp));
+              unsigned char* dstData = static_cast<unsigned char*>(CGBitmapContextGetData(cg));
+              size_t srcStride = CGBitmapContextGetBytesPerRow(temp);
+              size_t dstStride = CGBitmapContextGetBytesPerRow(cg);
+              if (srcData && dstData) {
+                for (int32_t y = 0; y < h; ++y) {
+                  const unsigned char* srcRow = srcData + y * srcStride;
+                  unsigned char* dstRow = dstData + (dstY + y) * dstStride + dstX;
+                  for (int32_t x = 0; x < w; ++x) {
+                    const uint8_t b = srcRow[x * 4 + 0];
+                    const uint8_t g = srcRow[x * 4 + 1];
+                    const uint8_t r = srcRow[x * 4 + 2];
+                    const uint8_t a = srcRow[x * 4 + 3];
+                    const uint8_t luma = static_cast<uint8_t>((54 * r + 183 * g + 19 * b + 128) >> 8);
+                    dstRow[x] = static_cast<uint8_t>((luma * a + 127) / 255);
+                  }
+                }
+                CGContextRelease(temp);
+                CGColorSpaceRelease(rgb);
+                fixer.Fix(this);
+                CGContextRestoreGState(mCg);
+                return;
+              }
+              CGContextRelease(temp);
+            }
+            CGColorSpaceRelease(rgb);
+          }
         }
       }
     }
