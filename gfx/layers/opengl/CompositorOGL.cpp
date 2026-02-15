@@ -42,7 +42,6 @@
 #include "GLReadTexImageHelper.h"
 #include "GLBlitTextureImageHelper.h"
 #include "HeapCopyOfStackArray.h"
-#include <string.h>                      // for strstr
 
 #include "GeckoProfiler.h"
 
@@ -249,16 +248,6 @@ CompositorOGL::Initialize(nsCString* const out_failureReason)
     return false;
   }
 
-#ifdef XP_MACOSX
-  bool forceRectangleNV3x = false;
-  if (mGLContext->Vendor() == gl::GLVendor::NVIDIA) {
-    const char* renderer = (const char*)mGLContext->fGetString(LOCAL_GL_RENDERER);
-    if (renderer && strstr(renderer, "NV3")) {
-      forceRectangleNV3x = true;
-    }
-  }
-#endif
-
   if (mGLContext->WorkAroundDriverBugs()) {
     /**
     * We'll test the ability here to bind NPOT textures to a framebuffer, if
@@ -270,18 +259,9 @@ CompositorOGL::Initialize(nsCString* const out_failureReason)
       LOCAL_GL_NONE
     };
 
-#ifdef XP_MACOSX
-    if (forceRectangleNV3x && !mGLContext->IsGLES()) {
-      textureTargets[0] = LOCAL_GL_TEXTURE_RECTANGLE_ARB;
-      textureTargets[1] = LOCAL_GL_NONE;
-    }
-#endif
-
     if (!mGLContext->IsGLES()) {
       // No TEXTURE_RECTANGLE_ARB available on ES2
-      if (!forceRectangleNV3x) {
-        textureTargets[1] = LOCAL_GL_TEXTURE_RECTANGLE_ARB;
-      }
+      textureTargets[1] = LOCAL_GL_TEXTURE_RECTANGLE_ARB;
     }
 
     mFBOTextureTarget = LOCAL_GL_NONE;
