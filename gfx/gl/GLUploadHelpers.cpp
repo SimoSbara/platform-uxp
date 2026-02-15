@@ -8,9 +8,7 @@
 #include "GLContext.h"
 #include "mozilla/gfx/2D.h"
 #include "gfxUtils.h"
-#include <string.h>
 #include "mozilla/gfx/Tools.h"  // For BytesPerPixel
-
 #include "nsRegion.h"
 #include "GfxTexturesReporter.h"
 #include "mozilla/gfx/Logging.h"
@@ -584,15 +582,6 @@ CanUploadNonPowerOfTwo(GLContext* gl)
 {
     if (!gl->WorkAroundDriverBugs())
         return true;
-
-#ifdef XP_MACOSX
-    if (gl->Vendor() == GLVendor::NVIDIA) {
-       const char* renderer = (const char*)gl->fGetString(LOCAL_GL_RENDERER);
-       if (renderer && strstr(renderer, "NV34")) {
-           return false;
-       }
-    }
-#endif
 
     // Some GPUs driver crash when uploading non power of two 565 textures.
     return gl->Renderer() != GLRenderer::Adreno200 &&

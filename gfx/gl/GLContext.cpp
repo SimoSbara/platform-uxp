@@ -889,13 +889,6 @@ GLContext::InitWithPrefixImpl(const char* prefix, bool trygl)
         {
             MarkUnsupported(GLFeature::depth_texture);
         }
-
-        if (Vendor() == gl::GLVendor::NVIDIA) {
-           const char* renderer = (const char*)fGetString(LOCAL_GL_RENDERER);
-           if (renderer && strstr(renderer, "NV34")) {
-               MarkUnsupported(GLFeature::texture_non_power_of_two);
-           }
-        }
 #endif
     }
 
