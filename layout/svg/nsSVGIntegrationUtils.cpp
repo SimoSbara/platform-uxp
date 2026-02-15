@@ -542,7 +542,7 @@ CreateAndPaintMaskSurface(const PaintFramesParams& aParams,
                                        SurfaceFormat::A8);
 #else
     maskDT = Factory::CreateDrawTarget(BackendType::COREGRAPHICS, maskSurfaceRect.Size(),
-                                       SurfaceFormat::A8);
+                                       SurfaceFormat::B8G8R8A8);
 #endif
   } else {
     maskDT = ctx.GetDrawTarget()->CreateSimilarDrawTarget(maskSurfaceRect.Size(),
@@ -596,7 +596,36 @@ CreateAndPaintMaskSurface(const PaintFramesParams& aParams,
     return paintResult;
   }
 
-  paintResult.maskSurface = maskDT->Snapshot();
+  RefPtr<SourceSurface> snapshot = maskDT->Snapshot();
+#if !defined(MAC_OS_X_VERSION_10_6) || (MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_6)
+  if (snapshot && snapshot->GetFormat() != SurfaceFormat::A8) {
+    RefPtr<DataSourceSurface> src = snapshot->GetDataSurface();
+    if (src && src->GetFormat() != SurfaceFormat::A8) {
+      RefPtr<DataSourceSurface> dst =
+        Factory::CreateDataSourceSurface(maskSurfaceRect.Size(), SurfaceFormat::A8);
+      if (dst) {
+        DataSourceSurface::ScopedMap srcMap(src, DataSourceSurface::READ);
+        DataSourceSurface::ScopedMap dstMap(dst, DataSourceSurface::WRITE);
+        if (srcMap.IsMapped() && dstMap.IsMapped()) {
+          const uint8_t* srcData = srcMap.GetData();
+          uint8_t* dstData = dstMap.GetData();
+          ptrdiff_t srcStride = srcMap.GetStride();
+          ptrdiff_t dstStride = dstMap.GetStride();
+          for (int32_t y = 0; y < maskSurfaceRect.height; ++y) {
+            const uint8_t* srcRow = srcData + y * srcStride;
+            uint8_t* dstRow = dstData + y * dstStride;
+            for (int32_t x = 0; x < maskSurfaceRect.width; ++x) {
+              dstRow[x] = srcRow[x * 4 + 3];
+            }
+          }
+          snapshot = dst;
+        }
+      }
+    }
+  }
+#endif
+
+  paintResult.maskSurface = snapshot;
   return paintResult;
 }
 
