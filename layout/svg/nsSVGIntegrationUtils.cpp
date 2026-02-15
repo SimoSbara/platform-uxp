@@ -92,7 +92,7 @@ private:
       NS_ASSERTION(!preTransformOverflows,
                    "GetVisualOverflowRect() won't return the pre-effects rect!");
     }
-#endif    
+#endif
     return aFrame->GetVisualOverflowRect();
   }
 
@@ -535,12 +535,19 @@ CreateAndPaintMaskSurface(const PaintFramesParams& aParams,
     return paintResult;
   }
 
-  RefPtr<DrawTarget> maskDT =
-    (ctx.GetDrawTarget()->GetBackendType() == BackendType::COREGRAPHICS)
-    ? Factory::CreateDrawTarget(BackendType::SKIA, maskSurfaceRect.Size(),
-                                SurfaceFormat::A8)
-    : ctx.GetDrawTarget()->CreateSimilarDrawTarget(maskSurfaceRect.Size(),
-                                                   SurfaceFormat::A8);
+  RefPtr<DrawTarget> maskDT;
+  if (ctx.GetDrawTarget()->GetBackendType() == BackendType::COREGRAPHICS) {
+#if defined(MAC_OS_X_VERSION_10_6) && (MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6)
+    maskDT = Factory::CreateDrawTarget(BackendType::SKIA, maskSurfaceRect.Size(),
+                                       SurfaceFormat::A8);
+#else
+    maskDT = Factory::CreateDrawTarget(BackendType::COREGRAPHICS, maskSurfaceRect.Size(),
+                                       SurfaceFormat::A8);
+#endif
+  } else {
+    maskDT = ctx.GetDrawTarget()->CreateSimilarDrawTarget(maskSurfaceRect.Size(),
+                                                          SurfaceFormat::A8);
+  }
   if (!maskDT || !maskDT->IsValid()) {
     paintResult.result = DrawResult::TEMPORARY_ERROR;
     return paintResult;
