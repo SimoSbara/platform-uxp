@@ -964,6 +964,11 @@ mips*-*)
     AC_DEFINE(JS_CPU_MIPS)
     ;;
 esac
+powerpc*-darwin*)
+	ENABLE_ION=1
+	AC_DEFINE(JS_CPU_PPC_OSX)
+	;;
+esac
 
 if test "$HAVE_64BIT_BUILD" ; then
     AC_DEFINE(JS_PUNBOX64)
@@ -1767,6 +1772,19 @@ elif test "$CPU_ARCH" = "mips" || test "$CPU_ARCH" = "mips32" || test "$CPU_ARCH
         JS_CODEGEN_MIPS64=1
     fi
 fi
+elif test "$CPU_ARCH" = "ppc"; then
+    AC_DEFINE(JS_CODEGEN_PPC_OSX)
+    JS_CODEGEN_PPC_OSX=1
+elif test "$CPU_ARCH" = "ppc64"; then
+    AC_DEFINE(JS_CODEGEN_PPC_OSX)
+    JS_CODEGEN_PPC_OSX=1
+fi
+
+dnl Hey, Mozilla, bite me.
+dnl Eventually we will expunge the old JS_CPU_PPC_OSX.
+dnl
+AC_SUBST(JS_CODEGEN_PPC_OSX)
+AC_SUBST(JS_CPU_PPC_OSX)
 
 AC_SUBST(JS_SIMULATOR)
 AC_SUBST(JS_SIMULATOR_ARM)

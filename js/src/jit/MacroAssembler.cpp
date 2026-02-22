@@ -281,20 +281,40 @@ MacroAssembler::loadFromTypedArray(Scalar::Type arrayType, const T& src, AnyRegi
         load8ZeroExtend(src, dest.gpr());
         break;
       case Scalar::Int16:
+#if defined(JS_CODEGEN_PPC_OSX)
+        load16SignExtendSwapped(src, dest.gpr());
+#else
         load16SignExtend(src, dest.gpr());
+#endif
         break;
       case Scalar::Uint16:
+#if defined(JS_CODEGEN_PPC_OSX)
+        load16ZeroExtendSwapped(src, dest.gpr());
+#else
         load16ZeroExtend(src, dest.gpr());
+#endif
         break;
       case Scalar::Int32:
+#if defined(JS_CODEGEN_PPC_OSX)
+        load32ByteSwapped(src, dest.gpr());
+#else
         load32(src, dest.gpr());
+#endif
         break;
       case Scalar::Uint32:
         if (dest.isFloat()) {
+#if defined(JS_CODEGEN_PPC_OSX)
+            load32ByteSwapped(src, temp);
+#else
             load32(src, temp);
+#endif
             convertUInt32ToDouble(temp, dest.fpu());
         } else {
-            load32(src, dest.gpr());
+#if defined(JS_CODEGEN_PPC_OSX)
+            load32ByteSwapped(src, dest.gpr());
+#else
+            load32(src, temp);
+#endif
 
             // Bail out if the value doesn't fit into a signed int32 value. This
             // is what allows MLoadUnboxedScalar to have a type() of
@@ -343,7 +363,11 @@ MacroAssembler::loadFromTypedArray(Scalar::Type arrayType, const T& src, const V
         break;
       case Scalar::Uint32:
         // Don't clobber dest when we could fail, instead use temp.
+#if defined(JS_CODEGEN_PPC_OSX)
+        load32ByteSwapped(src, temp);
+#else
         load32(src, temp);
+#endif
         if (allowDouble) {
             // If the value fits in an int32, store an int32 type tag.
             // Else, convert the value to double and box it.
@@ -439,6 +463,23 @@ MacroAssembler::loadUnboxedProperty(T address, JSValueType type, TypedOrValueReg
 
       case JSVAL_TYPE_OBJECT:
         if (output.hasValue()) {
+#ifdef JS_CODEGEN_PPC_OSX
+            // Faster shortbranching version.
+
+            Register scratch = output.valueReg().scratchReg();
+            loadPtr(address, scratch);
+
+            BufferOffset notNull, done;
+            notNull = _bc(0,
+                ma_cmp(scratch, Imm32(0), Assembler::NotEqual));
+
+            moveValue(NullValue(), output.valueReg());
+            done = _b(0);
+
+            bindSS(notNull);
+            tagValue(JSVAL_TYPE_OBJECT, scratch, output.valueReg());
+            bindSS(done);
+#else
             Register scratch = output.valueReg().scratchReg();
             loadPtr(address, scratch);
 
@@ -452,6 +493,7 @@ MacroAssembler::loadUnboxedProperty(T address, JSValueType type, TypedOrValueReg
             tagValue(JSVAL_TYPE_OBJECT, scratch, output.valueReg());
 
             bind(&done);
+#endif
         } else {
             // Reading null can't be possible here, as otherwise the result
             // would be a value (either because null has been read before or
@@ -564,6 +606,23 @@ MacroAssembler::storeUnboxedProperty(T address, JSValueType type,
             }
         } else {
             ValueOperand reg = value.reg().valueReg();
+#ifdef JS_CODEGEN_PPC_OSX
+            // Faster shortbranching version.
+            BufferOffset notInt32, end;
+
+            notInt32 = _bc(0,
+                ma_cmp(reg.typeReg(), ImmType(JSVAL_TYPE_INT32),
+                    Assembler::NotEqual));
+            int32ValueToDouble(reg, ScratchDoubleReg);
+            storeDouble(ScratchDoubleReg, address);
+            end = _b(0);
+
+            bindSS(notInt32);
+            if (failure)
+                branchTestDouble(Assembler::NotEqual, reg, failure);
+            storeValue(reg, address);
+            bindSS(end);
+#else
             Label notInt32, end;
             branchTestInt32(Assembler::NotEqual, reg, &notInt32);
             int32ValueToDouble(reg, ScratchDoubleReg);
@@ -574,6 +633,7 @@ MacroAssembler::storeUnboxedProperty(T address, JSValueType type,
                 branchTestDouble(Assembler::NotEqual, reg, failure);
             storeValue(reg, address);
             bind(&end);
+#endif
         }
         break;
 
@@ -591,10 +651,21 @@ MacroAssembler::storeUnboxedProperty(T address, JSValueType type,
                 StoreUnboxedFailure(*this, failure);
         } else {
             if (failure) {
+#ifdef JS_CODEGEN_PPC_OSX
+                // Faster shortbranching version.
+                BufferOffset ok;
+                Register rtype = value.reg().valueReg().typeReg();
+
+                ok = _bc(0,
+                    ma_cmp(rtype, ImmTag(JSVAL_TAG_NULL), Assembler::Equal));
+                branchTestObject(Assembler::NotEqual, rtype, failure);
+                bindSS(ok);
+#else
                 Label ok;
                 branchTestNull(Assembler::Equal, value.reg().valueReg(), &ok);
                 branchTestObject(Assembler::NotEqual, value.reg().valueReg(), failure);
                 bind(&ok);
+#endif
             }
             storeUnboxedPayload(value.reg().valueReg(), address, /* width = */ sizeof(uintptr_t));
         }
@@ -638,10 +709,32 @@ MacroAssembler::checkUnboxedArrayCapacity(Register obj, const RegisterOrInt32Con
     Address initLengthAddr(obj, UnboxedArrayObject::offsetOfCapacityIndexAndInitializedLength());
     Address lengthAddr(obj, UnboxedArrayObject::offsetOfLength());
 
+#ifdef JS_CODEGEN_PPC_OSX
+    BufferOffset capacityIsIndex, done;
+
+    load32(initLengthAddr, temp);
+    capacityIsIndex = _bc(0,
+        ma_cmp(temp, Imm32(UnboxedArrayObject::CapacityMask),
+            Assembler::NonZero));
+    branchKey(Assembler::BelowOrEqual, lengthAddr, index, failure);
+    done = _b(0);
+
+    bindSS(capacityIsIndex);
+
+    // Do a partial shift so that we can get an absolute offset from the base
+    // of CapacityArray to use.
+    JS_STATIC_ASSERT(sizeof(UnboxedArrayObject::CapacityArray[0]) == 4);
+    rshiftPtr(Imm32(UnboxedArrayObject::CapacityShift - 2), temp);
+    and32(Imm32(~0x3), temp);
+
+    addPtr(ImmPtr(&UnboxedArrayObject::CapacityArray), temp);
+    branchKey(Assembler::BelowOrEqual, Address(temp, 0), index, failure);
+    bindSS(done);
+#else
     Label capacityIsIndex, done;
     load32(initLengthAddr, temp);
     branchTest32(Assembler::NonZero, temp, Imm32(UnboxedArrayObject::CapacityMask), &capacityIsIndex);
-    branch32(Assembler::BelowOrEqual, lengthAddr, index, failure);
+    branchKey(Assembler::BelowOrEqual, lengthAddr, index, failure);
     jump(&done);
     bind(&capacityIsIndex);
 
@@ -652,8 +745,9 @@ MacroAssembler::checkUnboxedArrayCapacity(Register obj, const RegisterOrInt32Con
     and32(Imm32(~0x3), temp);
 
     addPtr(ImmPtr(&UnboxedArrayObject::CapacityArray), temp);
-    branch32(Assembler::BelowOrEqual, Address(temp, 0), index, failure);
+    branchKey(Assembler::BelowOrEqual, Address(temp, 0), index, failure);
     bind(&done);
+#endif
 }
 
 // Inlined version of gc::CheckAllocatorState that checks the bare essentials
@@ -733,38 +827,56 @@ MacroAssembler::freeListAllocate(Register result, Register temp, gc::AllocKind a
     CompileZone* zone = GetJitContext()->compartment->zone();
     int thingSize = int(gc::Arena::thingSize(allocKind));
 
+#ifdef JS_CODEGEN_PPC_OSX
+    BufferOffset fallback, success;
+
+    // Load FreeList::head::first of |zone|'s freeLists for |allocKind|. If
+    // there is no room remaining in the span, fall back to get the next one.
+    // No point in pipelining these because we don't have enough registers.
+    loadPtr(AbsoluteAddress(zone->addressOfFreeListFirst(allocKind)), result);
+    loadPtr(AbsoluteAddress(zone->addressOfFreeListLast(allocKind)), temp);
+    fallback = _bc(0, ma_cmp(temp, result, Assembler::BelowOrEqual));
+    computeEffectiveAddress(Address(result, thingSize), temp);
+    storePtr(temp, AbsoluteAddress(zone->addressOfFreeListFirst(allocKind)));
+    success = _b(0);
+
+    bindSS(fallback);
+    // If there are no FreeSpans left, we bail to finish the allocation. The
+    // interpreter will call |refillFreeLists|, setting up a new FreeList so
+    // that we can continue allocating in the jit.
+    branchPtr(Assembler::Equal, result, ImmPtr(0), fail);
+    // Point the free list head at the subsequent span (which may be empty).
+    loadPtr(Address(result, js::gc::FreeSpan::offsetOfFirst()), temp);
+    storePtr(temp, AbsoluteAddress(zone->addressOfFreeListFirst(allocKind)));
+    loadPtr(Address(result, js::gc::FreeSpan::offsetOfLast()), temp);
+    storePtr(temp, AbsoluteAddress(zone->addressOfFreeListLast(allocKind)));
+
+    bindSS(success);
+#else
     Label fallback;
     Label success;
 
-    // Load the first and last offsets of |zone|'s free list for |allocKind|.
-    // If there is no room remaining in the span, fall back to get the next one.
-    loadPtr(AbsoluteAddress(zone->addressOfFreeList(allocKind)), temp);
-    load16ZeroExtend(Address(temp, js::gc::FreeSpan::offsetOfFirst()), result);
-    load16ZeroExtend(Address(temp, js::gc::FreeSpan::offsetOfLast()), temp);
-    branch32(Assembler::AboveOrEqual, result, temp, &fallback);
-
-    // Bump the offset for the next allocation.
-    add32(Imm32(thingSize), result);
-    loadPtr(AbsoluteAddress(zone->addressOfFreeList(allocKind)), temp);
-    store16(result, Address(temp, js::gc::FreeSpan::offsetOfFirst()));
-    sub32(Imm32(thingSize), result);
-    addPtr(temp, result); // Turn the offset into a pointer.
+    // Load FreeList::head::first of |zone|'s freeLists for |allocKind|. If
+    // there is no room remaining in the span, fall back to get the next one.
+    loadPtr(AbsoluteAddress(zone->addressOfFreeListFirst(allocKind)), result);
+    branchPtr(Assembler::BelowOrEqual, AbsoluteAddress(zone->addressOfFreeListLast(allocKind)), result, &fallback);
+    computeEffectiveAddress(Address(result, thingSize), temp);
+    storePtr(temp, AbsoluteAddress(zone->addressOfFreeListFirst(allocKind)));
     jump(&success);
 
     bind(&fallback);
-    // If there are no free spans left, we bail to finish the allocation. The
-    // interpreter will call the GC allocator to set up a new arena to allocate
-    // from, after which we can resume allocating in the jit.
-    branchTest32(Assembler::Zero, result, result, fail);
-    loadPtr(AbsoluteAddress(zone->addressOfFreeList(allocKind)), temp);
-    addPtr(temp, result); // Turn the offset into a pointer.
-    Push(result);
-    // Update the free list to point to the next span (which may be empty).
-    load32(Address(result, 0), result);
-    store32(result, Address(temp, js::gc::FreeSpan::offsetOfFirst()));
-    Pop(result);
+    // If there are no FreeSpans left, we bail to finish the allocation. The
+    // interpreter will call |refillFreeLists|, setting up a new FreeList so
+    // that we can continue allocating in the jit.
+    branchPtr(Assembler::Equal, result, ImmPtr(0), fail);
+    // Point the free list head at the subsequent span (which may be empty).
+    loadPtr(Address(result, js::gc::FreeSpan::offsetOfFirst()), temp);
+    storePtr(temp, AbsoluteAddress(zone->addressOfFreeListFirst(allocKind)));
+    loadPtr(Address(result, js::gc::FreeSpan::offsetOfLast()), temp);
+    storePtr(temp, AbsoluteAddress(zone->addressOfFreeListLast(allocKind)));
 
     bind(&success);
+#endif
 }
 
 void
@@ -816,6 +928,41 @@ MacroAssembler::allocateObject(Register result, Register temp, gc::AllocKind all
 
     callMallocStub(nDynamicSlots * sizeof(GCPtrValue), temp, fail);
 
+#ifdef JS_CODEGEN_PPC_OSX
+    // Partially inline freeListAllocate here, since we can
+    // optimize the branching even further.
+    BufferOffset failAlloc, fallback, success1, success2;
+    CompileZone* zone = GetJitContext()->compartment->zone();
+    int thingSize = int(gc::Arena::thingSize(allocKind));
+
+    x_mr(r16, temp); // We know this doesn't call anything, so save stack.
+    loadPtr(AbsoluteAddress(zone->addressOfFreeListFirst(allocKind)), result);
+    loadPtr(AbsoluteAddress(zone->addressOfFreeListLast(allocKind)), temp);
+    fallback = _bc(0, ma_cmp(temp, result, Assembler::BelowOrEqual));
+    computeEffectiveAddress(Address(result, thingSize), temp);
+    storePtr(temp, AbsoluteAddress(zone->addressOfFreeListFirst(allocKind)));
+    success1 = _b(0);
+
+    bindSS(fallback);
+    failAlloc = _bc(0, ma_cmp(result, Imm32(0), Assembler::Equal));
+    loadPtr(Address(result, js::gc::FreeSpan::offsetOfFirst()), temp);
+    storePtr(temp, AbsoluteAddress(zone->addressOfFreeListFirst(allocKind)));
+    loadPtr(Address(result, js::gc::FreeSpan::offsetOfLast()), temp);
+    storePtr(temp, AbsoluteAddress(zone->addressOfFreeListLast(allocKind)));
+
+    bindSS(success1);
+    // Get temp back, just in case.
+    x_mr(temp, r16);
+    storePtr(temp, Address(result, NativeObject::offsetOfSlots()));
+    success2 = _b(0);
+
+    bindSS(failAlloc);
+    x_mr(temp, r16);
+    callFreeStub(temp);
+    jump(fail);
+
+    bindSS(success2);
+#else
     Label failAlloc;
     Label success;
 
@@ -833,6 +980,7 @@ MacroAssembler::allocateObject(Register result, Register temp, gc::AllocKind all
     jump(fail);
 
     bind(&success);
+#endif
 }
 
 void
@@ -1266,6 +1414,7 @@ MacroAssembler::compareStrings(JSOp op, Register left, Register right, Register 
 {
     MOZ_ASSERT(IsEqualityOp(op));
 
+#ifndef JS_CODEGEN_PPC_OSX
     Label done;
     Label notPointerEqual;
     // Fast path for identical strings.
@@ -1291,11 +1440,45 @@ MacroAssembler::compareStrings(JSOp op, Register left, Register right, Register 
     move32(Imm32(op == JSOP_NE || op == JSOP_STRICTNE), result);
 
     bind(&done);
+#else
+    // result can be used as a temp register.
+
+    cmplw(left, right);
+    BufferOffset notPointerEqual = _bc(0, Assembler::NotEqual);
+    move32(Imm32(op == JSOP_EQ || op == JSOP_STRICTEQ), result);
+    BufferOffset done1 = _b(0);
+    
+    bindSS(notPointerEqual);
+    
+    // Parallel compare the atom bit in both strings and eliminate a branch.
+    lwz(tempRegister, left, JSString::offsetOfFlags());
+    lwz(addressTempRegister, right, JSString::offsetOfFlags());
+    and_(result, tempRegister, addressTempRegister);
+    andi_rc(tempRegister, result, JSString::ATOM_BIT);
+    BufferOffset notAtom = _bc(0, Assembler::Zero);
+    
+    // If they are both atoms, we know that if they were equal they would
+    // have exited through the fast path above, so they must not be equal.
+    move32(Imm32(op == JSOP_NE || op == JSOP_STRICTNE), result);
+    BufferOffset done2 = _b(0);
+    
+    bindSS(notAtom);
+    // Strings of different length can never be equal.
+    // If they are the same length, we must do a slow comparison.
+    loadStringLength(left, result);
+    branch32(Assembler::Equal, Address(right, JSString::offsetOfLength()), result, fail);
+    // They are not the same length (fast path).
+    move32(Imm32(op == JSOP_NE || op == JSOP_STRICTNE), result);
+    
+    bindSS(done1);
+    bindSS(done2);
+#endif
 }
 
 void
 MacroAssembler::loadStringChars(Register str, Register dest)
 {
+#ifndef JS_CODEGEN_PPC_OSX
     Label isInline, done;
     branchTest32(Assembler::NonZero, Address(str, JSString::offsetOfFlags()),
                  Imm32(JSString::INLINE_CHARS_BIT), &isInline);
@@ -1307,6 +1490,19 @@ MacroAssembler::loadStringChars(Register str, Register dest)
     computeEffectiveAddress(Address(str, JSInlineString::offsetOfInlineStorage()), dest);
 
     bind(&done);
+#else
+    // Shortbranching.
+    lwz(tempRegister, str, JSString::offsetOfFlags());
+    andi_rc(addressTempRegister, tempRegister, JSString::INLINE_CHARS_BIT);
+    BufferOffset isInline = _bc(0, Assembler::NonZero);
+    
+    loadPtr(Address(str, JSString::offsetOfNonInlineChars()), dest);
+    BufferOffset done = _b(0);
+    
+    bindSS(isInline);
+    computeEffectiveAddress(Address(str, JSInlineString::offsetOfInlineStorage()), dest);
+    bindSS(done);
+#endif
 }
 
 void
@@ -1317,8 +1513,10 @@ MacroAssembler::loadStringChar(Register str, Register index, Register output)
 
     loadStringChars(str, output);
 
+#ifndef JS_CODEGEN_PPC_OSX
     Label isLatin1, done;
-    branchLatin1String(str, &isLatin1);
+    branchTest32(Assembler::NonZero, Address(str, JSString::offsetOfFlags()),
+                 Imm32(JSString::LATIN1_CHARS_BIT), &isLatin1);
     load16ZeroExtend(BaseIndex(output, index, TimesTwo), output);
     jump(&done);
 
@@ -1326,6 +1524,21 @@ MacroAssembler::loadStringChar(Register str, Register index, Register output)
     load8ZeroExtend(BaseIndex(output, index, TimesOne), output);
 
     bind(&done);
+#else
+    // There's no easy way to make this branchless, but we can still
+    // assume flags are still in tempRegister from loadStringChars. (!!)
+    MOZ_ASSERT(JSString::LATIN1_CHARS_BIT == 64);
+    andi_rc(addressTempRegister, tempRegister, JSString::LATIN1_CHARS_BIT);
+    BufferOffset isLatin1 = _bc(0, Assembler::NonZero);
+    
+    add(addressTempRegister, index, index);
+    lhzx(output, output, addressTempRegister);
+    BufferOffset done = _b(0);
+    
+    bindSS(isLatin1);
+    lbzx(output, output, index);
+    bindSS(done);
+#endif
 }
 
 static void
@@ -1439,7 +1652,7 @@ MacroAssembler::generateBailoutTail(Register scratch, Register bailoutInfo)
             // Discard exit frame.
             addToStackPtr(Imm32(ExitFrameLayout::SizeWithFooter()));
 
-#if defined(JS_CODEGEN_X86) || defined(JS_CODEGEN_X64)
+#if defined(JS_CODEGEN_X86) || defined(JS_CODEGEN_X64) || defined(JS_CODEGEN_PPC_OSX)
             push(ICTailCallReg);
 #endif
             jump(Address(ICStubReg, ICStub::offsetOfStubCode()));
@@ -2190,6 +2403,15 @@ MacroAssembler::linkProfilerCallSites(JitCode* code)
 void
 MacroAssembler::alignJitStackBasedOnNArgs(Register nargs)
 {
+#ifdef JS_CODEGEN_PPC_OSX
+    // PowerPC can have the stack aligned to word. Since we're just adding
+    // to the stack pointer here, add 4 or 0 more to ensure Value alignment,
+    // and assume value alignment, making this a no-op otherwise.
+    andi_rc(tempRegister, stackPointerRegister, 4);
+    subf(stackPointerRegister, tempRegister, stackPointerRegister);
+    return;
+#endif
+
     if (JitStackValueAlignment == 1)
         return;
 
@@ -2238,6 +2460,15 @@ MacroAssembler::alignJitStackBasedOnNArgs(Register nargs)
 void
 MacroAssembler::alignJitStackBasedOnNArgs(uint32_t nargs)
 {
+#ifdef JS_CODEGEN_PPC_OSX
+    // PowerPC can have the stack aligned to word. Since we're just adding
+    // to the stack pointer here, add 4 or 0 more to ensure Value alignment,
+    // and assume value alignment, making this a no-op otherwise.
+    andi_rc(tempRegister, stackPointerRegister, 4);
+    subf(stackPointerRegister, tempRegister, stackPointerRegister);
+    return;
+#endif
+
     if (JitStackValueAlignment == 1)
         return;
 
@@ -2582,10 +2813,14 @@ MacroAssembler::callWithABINoProfiler(void* fun, MoveOp::Type result)
     fun = Simulator::RedirectNativeFunction(fun, signature());
 #endif
 
+#ifndef JS_CODEGEN_PPC_OSX
     uint32_t stackAdjust;
     callWithABIPre(&stackAdjust);
     call(ImmPtr(fun));
     callWithABIPost(stackAdjust, result);
+#else
+    MacroAssemblerSpecific::callWithABIOptimized(fun, result);
+#endif
 }
 
 void

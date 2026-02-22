@@ -1871,9 +1871,15 @@ SnapshotIterator::allocationValue(const RValueAllocation& alloc, ReadMethod rm)
         } pun;
         MOZ_ASSERT(alloc.fpuReg().isSingle());
         pun.d = fromRegister(alloc.fpuReg());
+#ifdef JS_CODEGEN_PPC_OSX
+        // The register is always written as a double, so we need to cast
+        // it down.
+        return Float32Value((float)pun.d);
+#else
         // The register contains the encoding of a float32. We just read
         // the bits without making any conversion.
         return Float32Value(pun.f);
+#endif
       }
 
       case RValueAllocation::ANY_FLOAT_STACK:
@@ -2539,6 +2545,10 @@ MachineState::FromBailout(RegisterDump::GPRArray& regs, RegisterDump::FPUArray& 
         machine.setRegisterLocation(FloatRegister(i, FloatRegisters::Double), &fpregs[i]);
         machine.setRegisterLocation(FloatRegister(i, FloatRegisters::Single), &fpregs[i]);
     }
+#elif defined(JS_CODEGEN_PPC_OSX)
+    // Unified FPRs, all single and double, no SIMD.
+    for (unsigned i = 0; i < FloatRegisters::TotalPhys; i++)
+        machine.setRegisterLocation(FloatRegister(i), &fpregs[i]);
 #elif defined(JS_CODEGEN_X86) || defined(JS_CODEGEN_X64)
     for (unsigned i = 0; i < FloatRegisters::TotalPhys; i++) {
         machine.setRegisterLocation(FloatRegister(i, FloatRegisters::Single), &fpregs[i]);
