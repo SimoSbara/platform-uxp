@@ -32,6 +32,10 @@
 #define MFCR0(x) mfcr(x)
 #endif
 
+//from tenfourfox
+static const unsigned ActivationGlobalDataOffset = 0;
+static const unsigned HeapGlobalDataOffset = sizeof(void*);
+
 namespace js {
 namespace jit {
 
@@ -1642,12 +1646,14 @@ public:
 
     void loadAsmJSActivation(Register dest) {
     	ispew("loadAsmJSActivation(reg)");
-        loadPtr(Address(GlobalReg, wasm::ActivationGlobalDataOffset - AsmJSGlobalRegBias), dest);
+        loadPtr(Address(GlobalReg, ActivationGlobalDataOffset - AsmJSGlobalRegBias), dest);
     }
     void loadAsmJSHeapRegisterFromGlobalData() {
     	ispew("loadAsmJSHeapRegisterFromGlobalData()");
-        MOZ_ASSERT(Imm16::IsInSignedRange(wasm::HeapGlobalDataOffset - AsmJSGlobalRegBias));
-        loadPtr(Address(GlobalReg, wasm::HeapGlobalDataOffset - AsmJSGlobalRegBias), HeapReg);
+
+        //wasm::HeapGlobalDataOffset
+        MOZ_ASSERT(Imm16::IsInSignedRange(HeapGlobalDataOffset - AsmJSGlobalRegBias));
+        loadPtr(Address(GlobalReg, HeapGlobalDataOffset - AsmJSGlobalRegBias), HeapReg);
     }
 
     // Instrumentation for entering and leaving the profiler.
