@@ -963,7 +963,6 @@ mips*-*)
     ENABLE_ION=1
     AC_DEFINE(JS_CPU_MIPS)
     ;;
-esac
 powerpc*-darwin*)
 	ENABLE_ION=1
 	AC_DEFINE(JS_CPU_PPC_OSX)
